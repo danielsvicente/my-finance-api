@@ -8,6 +8,10 @@ import decimal
 
 router = APIRouter(prefix="/accounts")
 
+def variation(current, previous):
+    return (current * 100.0 / previous) - 100.0
+
+
 @router.get("/", response_model=List[AccountRead])
 def get_accounts(db: SessionLocal = Depends(get_db)):
     accounts = db.query(Account).all()
@@ -27,6 +31,7 @@ def create_account(account: AccountCreate, db: SessionLocal = Depends(get_db)):
     db_account_history = AccountHistory(
         account_id = db_account.id,
         balance = db_account.balance,
+        variation = 0.00,
         date = date.today()
     )
     db.add(db_account_history)
@@ -54,29 +59,31 @@ def get_total(db: SessionLocal = Depends(get_db)):
         else:
             total = total + row.balance
     total = total.quantize(decimal.Decimal('.01'), rounding=decimal.ROUND_DOWN)
-    db_total_hist = db.query(TotalHistory).order_by(TotalHistory.date.desc()).first()
-    if  db_total_hist is None or \
-        today.year > db_total_hist.date.year or \
-       (today.year == db_total_hist.date.year and today.month > db_total_hist.date.month):
-        
+    db_total_hist = db.query(TotalHistory).order_by(TotalHistory.date.desc()).limit(2).all()
+    if  len(db_total_hist) == 0 or \
+        today.year > db_total_hist[0].date.year or \
+       (today.year == db_total_hist[0].date.year and today.month > db_total_hist[0].date.month):
         db_total_hist = TotalHistory(
             balance = total,
+            variation = 0.00,
             eur_brl_rate = eurbrl_rate,
             date = today
         )
         db.add(db_total_hist)   
     else:
-        db_total_hist.balance = total
-        db_total_hist.eur_brl_rate = eurbrl_rate
-        db_total_hist.date = today
+        db_total_hist[0].balance = total
+        db_total_hist[0].eur_brl_rate = eurbrl_rate
+        db_total_hist[0].date = today
+        if len(db_total_hist) > 1:
+            db_total_hist[0].variation = variation(float(db_total_hist[0].balance), float(db_total_hist[1].balance))
     db.commit()
     return total
-
+    
 
 @router.get("/total/history", response_model=List[TotalHistoryRead])
 def get_all_total_history(db: SessionLocal = Depends(get_db)):
     get_total(db)
-    result = db.query(TotalHistory).all()
+    result = db.query(TotalHistory).order_by(TotalHistory.date.asc()).all()
     return result
 
 
@@ -99,20 +106,26 @@ def update_account(account_id: int, account: AccountUpdate, db: SessionLocal = D
     db_account.balance = account.balance
     db.commit()
     db.refresh(db_account)
-    db_acc_hist = db.query(AccountHistory).filter(AccountHistory.account_id == account_id).order_by(AccountHistory.date.desc()).first()
-    if db_acc_hist is None:
+    db_acc_hist = db.query(AccountHistory).filter(AccountHistory.account_id == account_id).order_by(AccountHistory.date.desc()).limit(2).all()
+    if len(db_acc_hist) == 0:
         raise HTTPException(status_code=404, detail="Account history not found")
     today = date.today()
-    if today.year > db_acc_hist.date.year or (today.year == db_acc_hist.date.year and today.month > db_acc_hist.date.month):
+
+    # if it's a new month, create a new entry
+    if today.year > db_acc_hist[0].date.year or \
+      (today.year == db_acc_hist[0].date.year and today.month > db_acc_hist[0].date.month):
         db_account_history = AccountHistory(
             account_id = db_account.id,
             balance = db_account.balance,
+            variation = variation(float(db_account.balance), float(db_acc_hist[0].balance)),
             date = today
         )
         db.add(db_account_history)
     else:
-        db_acc_hist.balance = account.balance
-        db_acc_hist.date = today
+        db_acc_hist[0].balance = account.balance
+        db_acc_hist[0].date = today
+        if len(db_acc_hist) > 1:
+            db_acc_hist[0].variation = variation(float(db_acc_hist[0].balance), float(db_acc_hist[1].balance))
     db.commit()
     get_total(db)
     return db_account
