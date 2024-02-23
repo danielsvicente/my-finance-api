@@ -34,6 +34,8 @@ class TotalHistory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     balance: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    invested: Mapped[float] = mapped_column(Numeric(12, 2))
+    uninvested: Mapped[float] = mapped_column(Numeric(12, 2))
     variation: Mapped[float] = mapped_column()
     eur_brl_rate: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False)
     date: Mapped[str] = mapped_column(Date(), nullable=False)

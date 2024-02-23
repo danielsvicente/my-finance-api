@@ -66,19 +66,29 @@ def get_total(db: SessionLocal = Depends(get_db)):
     eurbrl_rate = decimal.Decimal(yfinance.Ticker("EURBRL=X").history(period="1d")['Close'][0])
     eurbrl_rate = eurbrl_rate.quantize(decimal.Decimal('.0001'), rounding=decimal.ROUND_DOWN)
     total = decimal.Decimal(0.00)
-    result = db.query(Account.balance, Account.currency).all()
-    for row in result:
-        if row.currency == Currency.BRL:
-            total = total + (row.balance / eurbrl_rate)
+    total_invested = decimal.Decimal(0.00)
+    total_uninvested = decimal.Decimal(0.00)
+    accounts = db.query(Account).all()
+    for account in accounts:
+        balance = account.balance
+        if account.currency == Currency.BRL:
+            balance = account.balance / eurbrl_rate
+        total = total + balance
+        if account.type == AccountType.INVESTMENT:
+            total_invested = total_invested + balance
         else:
-            total = total + row.balance
+            total_uninvested = total_uninvested + balance
     total = total.quantize(decimal.Decimal('.01'), rounding=decimal.ROUND_DOWN)
+    total_invested = total_invested.quantize(decimal.Decimal('.01'), rounding=decimal.ROUND_DOWN)
+    total_uninvested = total_uninvested.quantize(decimal.Decimal('.01'), rounding=decimal.ROUND_DOWN)
     db_total_hist = db.query(TotalHistory).order_by(TotalHistory.date.desc()).limit(2).all()
     if  len(db_total_hist) == 0 or \
         today.year > db_total_hist[0].date.year or \
        (today.year == db_total_hist[0].date.year and today.month > db_total_hist[0].date.month):
         db_total_hist = TotalHistory(
             balance = total,
+            invested = total_invested,
+            uninvested = total_uninvested,
             variation = 0.00,
             eur_brl_rate = eurbrl_rate,
             date = today
@@ -86,12 +96,15 @@ def get_total(db: SessionLocal = Depends(get_db)):
         db.add(db_total_hist)   
     else:
         db_total_hist[0].balance = total
+        db_total_hist[0].invested = total_invested
+        db_total_hist[0].uninvested = total_uninvested
         db_total_hist[0].eur_brl_rate = eurbrl_rate
         db_total_hist[0].date = today
         if len(db_total_hist) > 1:
             db_total_hist[0].variation = variation(float(db_total_hist[0].balance), float(db_total_hist[1].balance))
     db.commit()
-    return total
+    db.refresh(db_total_hist[0])
+    return db_total_hist[0]
     
 
 @router.get("/total/history", response_model=List[TotalHistoryRead])
