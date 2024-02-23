@@ -28,6 +28,18 @@ class AccountRead(BaseModel):
         from_attributes = True
 
 
+class AccountWithVariation(BaseModel):
+    id: int
+    name: str
+    type: AccountType
+    currency: Currency
+    balance: float
+    variation: float
+
+    class Config:
+        from_attributes = True
+
+
 class AccountHistoryRead(BaseModel):
     id: int
     balance: float

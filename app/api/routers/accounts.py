@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy import select, func
 from app.models.account import *
 from app.db.schema import *
 from app.db.database import SessionLocal, get_db
@@ -12,10 +13,23 @@ def variation(current, previous):
     return (current * 100.0 / previous) - 100.0
 
 
-@router.get("/", response_model=List[AccountRead])
+@router.get("/", response_model=List[AccountWithVariation])
 def get_accounts(db: SessionLocal = Depends(get_db)):
-    accounts = db.query(Account).all()
-    return accounts
+
+    # Subquery to find the latest date for each account_id
+    subquery = db.query(AccountHistory.account_id, func.max(AccountHistory.date).label('latest')) \
+                    .group_by(AccountHistory.account_id) \
+                    .subquery()
+
+    # Joining AccountHistory with the subquery and Account
+    query = db.query(Account.id, Account.name, Account.type, Account.currency, Account.balance, AccountHistory.variation) \
+                .join(subquery, AccountHistory.account_id == subquery.c.account_id) \
+                .filter(AccountHistory.date == subquery.c.latest) \
+                .join(Account, AccountHistory.account_id == Account.id)
+
+    # Execute the query
+    return query.all()
+
 
 @router.post("/", response_model=AccountCreate)
 def create_account(account: AccountCreate, db: SessionLocal = Depends(get_db)):
@@ -87,12 +101,25 @@ def get_all_total_history(db: SessionLocal = Depends(get_db)):
     return result
 
 
-@router.get("/{account_id}", response_model=AccountCreate)
+@router.get("/{account_id}", response_model=AccountWithVariation)
 def get_account(account_id: int, db: SessionLocal = Depends(get_db)):
-    db_account = db.query(Account).filter(Account.id == account_id).first()
-    if db_account is None:
-        raise HTTPException(status_code=404, detail="Account not found")
-    return db_account
+
+    # Subquery to find the latest record
+    subquery = db.query(AccountHistory.account_id, func.max(AccountHistory.date).label('latest')) \
+                    .filter(AccountHistory.account_id == account_id) \
+                    .group_by(AccountHistory.account_id) \
+                    .subquery()
+
+    # Joining AccountHistory with the subquery and Account
+    query = db.query(Account.id, Account.name, Account.type, Account.currency, Account.balance, AccountHistory.variation) \
+                .join(subquery, AccountHistory.account_id == subquery.c.account_id) \
+                .filter(AccountHistory.date == subquery.c.latest) \
+                .join(Account, AccountHistory.account_id == Account.id)
+    
+    print(query)
+
+    # Execute the query
+    return query.one()
 
 
 @router.put("/{account_id}", response_model=AccountUpdate)
@@ -106,7 +133,11 @@ def update_account(account_id: int, account: AccountUpdate, db: SessionLocal = D
     db_account.balance = account.balance
     db.commit()
     db.refresh(db_account)
-    db_acc_hist = db.query(AccountHistory).filter(AccountHistory.account_id == account_id).order_by(AccountHistory.date.desc()).limit(2).all()
+    db_acc_hist = db.query(AccountHistory) \
+                    .filter(AccountHistory.account_id == account_id) \
+                    .order_by(AccountHistory.date.desc()) \
+                    .limit(2) \
+                    .all()
     if len(db_acc_hist) == 0:
         raise HTTPException(status_code=404, detail="Account history not found")
     today = date.today()
@@ -143,8 +174,9 @@ def delete_account(account_id: int, db: SessionLocal = Depends(get_db)):
 
 @router.get("/{account_id}/history", response_model=List[AccountHistoryRead])
 def get_account_history(account_id: int, db: SessionLocal = Depends(get_db)):
-    db_account_history = db.query(AccountHistory).filter(AccountHistory.account_id == account_id)
-    print(db_account_history)
+    db_account_history = db.query(AccountHistory) \
+        .filter(AccountHistory.account_id == account_id) \
+        .order_by(AccountHistory.date.desc())
     if db_account_history is None:
         raise HTTPException(status_code=404, detail="No data found for this account")
     return db_account_history
