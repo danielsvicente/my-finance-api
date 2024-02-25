@@ -25,7 +25,8 @@ def get_accounts(db: SessionLocal = Depends(get_db)):
     query = db.query(Account.id, Account.name, Account.type, Account.currency, Account.balance, AccountHistory.variation) \
                 .join(subquery, AccountHistory.account_id == subquery.c.account_id) \
                 .filter(AccountHistory.date == subquery.c.latest) \
-                .join(Account, AccountHistory.account_id == Account.id)
+                .join(Account, AccountHistory.account_id == Account.id) \
+                .order_by(Account.balance.desc())
 
     # Execute the query
     return query.all()
@@ -177,6 +178,7 @@ def update_account(account_id: int, account: AccountUpdate, db: SessionLocal = D
 
 @router.delete("/{account_id}")
 def delete_account(account_id: int, db: SessionLocal = Depends(get_db)):
+    # FIXME: delete children records before deleting account
     db_account = db.query(Account).filter(Account.id == account_id).first()
     if db_account is None:
         raise HTTPException(status_code=404, detail="Account not found")
