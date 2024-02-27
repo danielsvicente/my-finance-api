@@ -1,8 +1,11 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from app.db.schema import Base
+from app.config import get_settings
 
-DATABASE_URL = "sqlite:///./dashboard.db"
+settings = get_settings()
+
+DATABASE_URL = settings.database_url
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
