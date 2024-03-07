@@ -54,6 +54,8 @@ class AccountHistoryRead(BaseModel):
 class TotalHistoryRead(BaseModel):
     id: int
     balance: float
+    invested: float
+    uninvested: float
     variation: float
     eur_brl_rate: float
     date: date
