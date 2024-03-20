@@ -158,6 +158,20 @@ def get_account_history(account_id: int, db: SessionLocal = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No data found for this account")
     return db_account_history
 
+
+@router.post("/{account_id}/history/{account_history_id}/note", response_model=None, status_code=status.HTTP_201_CREATED)
+def create_note(account_id: int, account_history_id: int, note: NoteCreate, db: SessionLocal = Depends(get_db)):
+    db_note = Note(
+        account_history_id=account_history_id,
+        note=note.note,
+        date=note.date
+    )
+    db.add(db_note)
+    db.commit()
+    db.refresh(db_note)
+    return db_note
+
+
 def update_total(db):
     today = date.today()
     eurbrl_rate = decimal.Decimal(yfinance.Ticker("EURBRL=X").history(period="1d")['Close'][0])
