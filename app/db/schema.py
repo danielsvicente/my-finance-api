@@ -27,7 +27,7 @@ class AccountHistory(Base):
     balance: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     variation: Mapped[float] = mapped_column()
     date: Mapped[str] = mapped_column(Date(), nullable=False)
-    # note: Mapped[str] = mapped_column()
+    notes: Mapped[List["Note"]] = relationship(back_populates="account_history")
 
 class TotalHistory(Base):
     __tablename__ = "total_history"
@@ -39,4 +39,12 @@ class TotalHistory(Base):
     variation: Mapped[float] = mapped_column()
     eur_brl_rate: Mapped[float] = mapped_column(Numeric(5, 4), nullable=False)
     date: Mapped[str] = mapped_column(Date(), nullable=False)
-    # note: Mapped[str] = mapped_column()
+
+class Note(Base):
+    __tablename__ = "note"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    account_history_id: Mapped[int] = mapped_column(ForeignKey("account_history.id"), nullable=False)
+    account_history: Mapped["AccountHistory"] = relationship(back_populates="notes")
+    note: Mapped[str] = mapped_column(nullable=False)
+    date: Mapped[str] = mapped_column(Date(), nullable=False)
