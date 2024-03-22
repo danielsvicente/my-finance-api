@@ -159,8 +159,11 @@ def get_account_history(account_id: int, db: SessionLocal = Depends(get_db)):
     return db_account_history
 
 
-@router.post("/{account_id}/history/{account_history_id}/note", response_model=None, status_code=status.HTTP_201_CREATED)
-def create_note(account_id: int, account_history_id: int, note: NoteCreate, db: SessionLocal = Depends(get_db)):
+@router.post("/{account_id}/history/note", response_model=None, status_code=status.HTTP_201_CREATED)
+def create_note(account_id: int, note: NoteCreate, db: SessionLocal = Depends(get_db)):
+    account_history_id = db.query(AccountHistory.id) \
+        .filter(AccountHistory.account_id == account_id, 
+                AccountHistory.date.between(note.date.strftime('%Y-%m-01'), note.date.strftime('%Y-%m-31')))
     db_note = Note(
         account_history_id=account_history_id,
         note=note.note,
